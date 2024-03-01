@@ -20,6 +20,8 @@ package org.kie.kogito.runtime.tools.quarkus.extension.deployment;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import org.kie.kogito.quarkus.extensions.spi.deployment.KogitoDataIndexServiceAvailableBuildItem;
@@ -31,8 +33,6 @@ import io.quarkus.deployment.Capabilities;
 import io.quarkus.deployment.IsDevelopment;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
-import io.quarkus.deployment.annotations.ExecutionTime;
-import io.quarkus.deployment.annotations.Record;
 import io.quarkus.deployment.builditem.LaunchModeBuildItem;
 import io.quarkus.deployment.builditem.LiveReloadBuildItem;
 import io.quarkus.deployment.builditem.ShutdownContextBuildItem;
@@ -40,8 +40,11 @@ import io.quarkus.deployment.pkg.builditem.CurateOutcomeBuildItem;
 import io.quarkus.deployment.util.WebJarUtil;
 import io.quarkus.devconsole.spi.DevConsoleTemplateInfoBuildItem;
 import io.quarkus.maven.dependency.ResolvedDependency;
+import io.quarkus.runtime.ShutdownContext;
 import io.quarkus.vertx.http.deployment.RouteBuildItem;
-import io.quarkus.vertx.http.runtime.devmode.DevConsoleRecorder;
+import io.quarkus.vertx.http.runtime.devmode.FileSystemStaticHandler;
+import io.vertx.core.Handler;
+import io.vertx.ext.web.RoutingContext;
 
 public class DevConsoleProcessor {
 
@@ -58,9 +61,7 @@ public class DevConsoleProcessor {
     }
 
     @BuildStep(onlyIf = IsDevelopment.class)
-    @Record(ExecutionTime.RUNTIME_INIT)
-    public void deployStaticResources(final DevConsoleRecorder recorder,
-            final CurateOutcomeBuildItem curateOutcomeBuildItem,
+    public void deployStaticResources(final CurateOutcomeBuildItem curateOutcomeBuildItem,
             final LiveReloadBuildItem liveReloadBuildItem,
             final LaunchModeBuildItem launchMode,
             final ShutdownContextBuildItem shutdownContext,
@@ -79,15 +80,43 @@ public class DevConsoleProcessor {
 
         routeBuildItemBuildProducer.produce(new RouteBuildItem.Builder()
                 .route(BASE_RELATIVE_URL + "/resources/*")
-                .handler(recorder.devConsoleHandler(devConsoleStaticResourcesDeploymentPath.toString(),
+                .handler(devConsoleHandler(devConsoleStaticResourcesDeploymentPath.toString(),
                         shutdownContext))
                 .build());
 
         routeBuildItemBuildProducer.produce(new RouteBuildItem.Builder()
                 .route(BASE_RELATIVE_URL + "/*")
-                .handler(recorder.devConsoleHandler(devConsoleStaticResourcesDeploymentPath.toString(),
+                .handler(devConsoleHandler(devConsoleStaticResourcesDeploymentPath.toString(),
                         shutdownContext))
                 .build());
+    }
+
+    /**
+     *
+     * @param devConsoleFinalDestination
+     * @param shutdownContext
+     * @return
+     * @deprecated use {@link #fileSystemStaticHandler(List, ShutdownContext)}
+     */
+    @Deprecated
+    Handler<RoutingContext> devConsoleHandler(String devConsoleFinalDestination,
+            ShutdownContext shutdownContext) {
+        List<FileSystemStaticHandler.StaticWebRootConfiguration> webRootConfigurations = new ArrayList<>();
+        webRootConfigurations.add(
+                new FileSystemStaticHandler.StaticWebRootConfiguration(devConsoleFinalDestination, ""));
+
+        return fileSystemStaticHandler(webRootConfigurations, shutdownContext);
+    }
+
+    Handler<RoutingContext> fileSystemStaticHandler(
+            List<FileSystemStaticHandler.StaticWebRootConfiguration> webRootConfigurations,
+            ShutdownContext shutdownContext) {
+
+        FileSystemStaticHandler fileSystemStaticHandler = new FileSystemStaticHandler(webRootConfigurations);
+
+        shutdownContext.addShutdownTask(new ShutdownContext.CloseRunnable(fileSystemStaticHandler));
+
+        return fileSystemStaticHandler;
     }
 
     @SuppressWarnings("unused")
