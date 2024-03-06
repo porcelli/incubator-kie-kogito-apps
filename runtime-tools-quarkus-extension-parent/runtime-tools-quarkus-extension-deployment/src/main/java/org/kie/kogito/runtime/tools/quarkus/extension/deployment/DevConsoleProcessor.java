@@ -18,57 +18,55 @@
  */
 package org.kie.kogito.runtime.tools.quarkus.extension.deployment;
 
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-
-import org.kie.kogito.quarkus.extensions.spi.deployment.KogitoDataIndexServiceAvailableBuildItem;
-import org.kie.kogito.quarkus.extensions.spi.deployment.TrustyServiceAvailableBuildItem;
-import org.kie.kogito.runtime.tools.quarkus.extension.runtime.config.DevConsoleRuntimeConfig;
-import org.kie.kogito.runtime.tools.quarkus.extension.runtime.user.UserInfoSupplier;
-
 import io.quarkus.deployment.Capabilities;
 import io.quarkus.deployment.IsDevelopment;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
+import io.quarkus.deployment.annotations.ExecutionTime;
+import io.quarkus.deployment.annotations.Record;
+import io.quarkus.deployment.builditem.ConfigurationBuildItem;
 import io.quarkus.deployment.builditem.LaunchModeBuildItem;
 import io.quarkus.deployment.builditem.LiveReloadBuildItem;
 import io.quarkus.deployment.builditem.ShutdownContextBuildItem;
 import io.quarkus.deployment.pkg.builditem.CurateOutcomeBuildItem;
 import io.quarkus.deployment.util.WebJarUtil;
-import io.quarkus.devconsole.spi.DevConsoleTemplateInfoBuildItem;
+import io.quarkus.devui.spi.page.CardPageBuildItem;
+import io.quarkus.devui.spi.page.Page;
 import io.quarkus.maven.dependency.ResolvedDependency;
-import io.quarkus.runtime.ShutdownContext;
+import io.quarkus.vertx.http.deployment.NonApplicationRootPathBuildItem;
 import io.quarkus.vertx.http.deployment.RouteBuildItem;
-import io.quarkus.vertx.http.runtime.devmode.FileSystemStaticHandler;
-import io.vertx.core.Handler;
-import io.vertx.ext.web.RoutingContext;
+import io.quarkus.vertx.http.runtime.management.ManagementInterfaceBuildTimeConfig;
+import org.kie.kogito.quarkus.extensions.spi.deployment.KogitoDataIndexServiceAvailableBuildItem;
+import org.kie.kogito.quarkus.extensions.spi.deployment.TrustyServiceAvailableBuildItem;
+import org.kie.kogito.runtime.tools.quarkus.extension.deployment.data.UserInfo;
+import org.kie.kogito.runtime.tools.quarkus.extension.runtime.config.DevConsoleRuntimeConfig;
+import org.kie.kogito.runtime.tools.quarkus.extension.runtime.config.DevUIStaticArtifactsRecorder;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class DevConsoleProcessor {
 
     private static final String STATIC_RESOURCES_PATH = "dev-static/";
-    private static final String BASE_RELATIVE_URL = "/q/dev-v1/org.kie.kogito.runtime-tools-quarkus-extension";
+    private static final String BASE_RELATIVE_URL = "/q/dev-ui/org.jbpm.jbpm-quarkus-devui";
     private static final String DATA_INDEX_CAPABILITY = "org.kie.kogito.data-index";
 
     @SuppressWarnings("unused")
     @BuildStep(onlyIf = IsDevelopment.class)
-    public void collectUsersInfo(final BuildProducer<DevConsoleTemplateInfoBuildItem> devConsoleTemplateInfoBuildItemBuildProducer,
-            final DevConsoleRuntimeConfig devConsoleRuntimeConfig) {
-        devConsoleTemplateInfoBuildItemBuildProducer.produce(new DevConsoleTemplateInfoBuildItem("userInfo",
-                new UserInfoSupplier(devConsoleRuntimeConfig.userConfigByUser).get()));
-    }
-
-    @BuildStep(onlyIf = IsDevelopment.class)
-    public void deployStaticResources(final CurateOutcomeBuildItem curateOutcomeBuildItem,
+    @Record(ExecutionTime.RUNTIME_INIT)
+    public void deployStaticResources(final DevUIStaticArtifactsRecorder devUIStaticArtifactsRecorder,
+            final CurateOutcomeBuildItem curateOutcomeBuildItem,
             final LiveReloadBuildItem liveReloadBuildItem,
             final LaunchModeBuildItem launchMode,
             final ShutdownContextBuildItem shutdownContext,
             final BuildProducer<RouteBuildItem> routeBuildItemBuildProducer) throws IOException {
         ResolvedDependency devConsoleResourcesArtifact = WebJarUtil.getAppArtifact(curateOutcomeBuildItem,
-                "org.kie.kogito",
-                "runtime-tools-quarkus-extension-deployment");
+                "org.jbpm",
+                "jbpm-quarkus-devui-deployment");
 
         Path devConsoleStaticResourcesDeploymentPath = WebJarUtil.copyResourcesForDevOrTest(
                 liveReloadBuildItem,
@@ -80,59 +78,117 @@ public class DevConsoleProcessor {
 
         routeBuildItemBuildProducer.produce(new RouteBuildItem.Builder()
                 .route(BASE_RELATIVE_URL + "/resources/*")
-                .handler(devConsoleHandler(devConsoleStaticResourcesDeploymentPath.toString(),
+                .handler(devUIStaticArtifactsRecorder.handler(devConsoleStaticResourcesDeploymentPath.toString(),
                         shutdownContext))
                 .build());
 
         routeBuildItemBuildProducer.produce(new RouteBuildItem.Builder()
                 .route(BASE_RELATIVE_URL + "/*")
-                .handler(devConsoleHandler(devConsoleStaticResourcesDeploymentPath.toString(),
+                .handler(devUIStaticArtifactsRecorder.handler(devConsoleStaticResourcesDeploymentPath.toString(),
                         shutdownContext))
                 .build());
     }
 
-    /**
-     *
-     * @param devConsoleFinalDestination
-     * @param shutdownContext
-     * @return
-     * @deprecated use {@link #fileSystemStaticHandler(List, ShutdownContext)}
-     */
-    @Deprecated
-    Handler<RoutingContext> devConsoleHandler(String devConsoleFinalDestination,
-            ShutdownContext shutdownContext) {
-        List<FileSystemStaticHandler.StaticWebRootConfiguration> webRootConfigurations = new ArrayList<>();
-        webRootConfigurations.add(
-                new FileSystemStaticHandler.StaticWebRootConfiguration(devConsoleFinalDestination, ""));
-
-        return fileSystemStaticHandler(webRootConfigurations, shutdownContext);
-    }
-
-    Handler<RoutingContext> fileSystemStaticHandler(
-            List<FileSystemStaticHandler.StaticWebRootConfiguration> webRootConfigurations,
-            ShutdownContext shutdownContext) {
-
-        FileSystemStaticHandler fileSystemStaticHandler = new FileSystemStaticHandler(webRootConfigurations);
-
-        shutdownContext.addShutdownTask(new ShutdownContext.CloseRunnable(fileSystemStaticHandler));
-
-        return fileSystemStaticHandler;
-    }
-
-    @SuppressWarnings("unused")
     @BuildStep(onlyIf = IsDevelopment.class)
-    public void isProcessEnabled(BuildProducer<DevConsoleTemplateInfoBuildItem> devConsoleTemplateInfoBuildItemBuildProducer,
-            Optional<KogitoDataIndexServiceAvailableBuildItem> dataIndexServiceAvailableBuildItem,
-            Capabilities capabilities) {
-        devConsoleTemplateInfoBuildItemBuildProducer.produce(new DevConsoleTemplateInfoBuildItem("isProcessEnabled",
-                dataIndexServiceAvailableBuildItem.isPresent() || capabilities.isPresent(DATA_INDEX_CAPABILITY)));
+    public CardPageBuildItem pages(
+            final NonApplicationRootPathBuildItem nonApplicationRootPathBuildItem,
+            final DevConsoleRuntimeConfig devConsoleRuntimeConfig,
+            final ManagementInterfaceBuildTimeConfig managementInterfaceBuildTimeConfig,
+            final LaunchModeBuildItem launchModeBuildItem,
+            final ConfigurationBuildItem configurationBuildItem,
+            final Optional<KogitoDataIndexServiceAvailableBuildItem> dataIndexServiceAvailableBuildItem,
+            final Optional<TrustyServiceAvailableBuildItem> trustyServiceAvailableBuildItem,
+            final Capabilities capabilities) {
+
+        CardPageBuildItem cardPageBuildItem = new CardPageBuildItem();
+
+        String uiPath = nonApplicationRootPathBuildItem.resolveManagementPath(BASE_RELATIVE_URL,
+                managementInterfaceBuildTimeConfig, launchModeBuildItem, true);
+
+        String openapiPath = getProperty(configurationBuildItem, "quarkus.smallrye-openapi.path");
+        String devUIUrl = getProperty(configurationBuildItem, "kogito.dev-ui.url");
+        String dataIndexUrl = getProperty(configurationBuildItem, "kogito.data-index.url");
+        String trustyServiceUrl = getProperty(configurationBuildItem, "kogito.trusty.http.url");
+
+        cardPageBuildItem.addBuildTimeData("extensionBasePath", uiPath);
+        cardPageBuildItem.addBuildTimeData("openapiPath", openapiPath);
+        cardPageBuildItem.addBuildTimeData("devUIUrl", devUIUrl);
+        cardPageBuildItem.addBuildTimeData("dataIndexUrl", dataIndexUrl);
+        cardPageBuildItem.addBuildTimeData("isTracingEnabled", trustyServiceAvailableBuildItem.isPresent());
+        cardPageBuildItem.addBuildTimeData("trustyServiceUrl", trustyServiceUrl);
+        cardPageBuildItem.addBuildTimeData("userData", readUsersInfo(devConsoleRuntimeConfig));
+
+        if (dataIndexServiceAvailableBuildItem.isPresent() || capabilities.isPresent(DATA_INDEX_CAPABILITY)) {
+            cardPageBuildItem.addPage(Page.webComponentPageBuilder()
+                    .componentLink("qwc-jbpm-quarkus-devui.js")
+                    .metadata("page", "Processes")
+                    .title("Process Instances")
+                    .icon("font-awesome-solid:diagram-project"));
+
+            cardPageBuildItem.addPage(Page.webComponentPageBuilder()
+                    .componentLink("qwc-jbpm-quarkus-devui.js")
+                    .metadata("page", "TaskInbox")
+                    .title("Tasks")
+                    .icon("font-awesome-solid:bars-progress"));
+
+            cardPageBuildItem.addPage(Page.webComponentPageBuilder()
+                    .componentLink("qwc-jbpm-quarkus-devui.js")
+                    .metadata("page", "JobsManagement")
+                    .title("Jobs")
+                    .icon("font-awesome-solid:clock"));
+
+            cardPageBuildItem.addPage(Page.webComponentPageBuilder()
+                    .componentLink("qwc-jbpm-quarkus-devui.js")
+                    .metadata("page", "Forms")
+                    .title("Forms")
+                    .icon("font-awesome-solid:table-cells"));
+        }
+
+        if (trustyServiceAvailableBuildItem.isPresent()) {
+            cardPageBuildItem.addPage(Page.webComponentPageBuilder()
+                    .componentLink("qwc-jbpm-quarkus-devui.js")
+                    .metadata("page", "Audit")
+                    .title("Audit investigation")
+                    .icon("font-awesome-solid:gauge-high"));
+        }
+
+        return cardPageBuildItem;
     }
 
-    @SuppressWarnings("unused")
-    @BuildStep(onlyIf = IsDevelopment.class)
-    public void isTracingEnabled(final BuildProducer<DevConsoleTemplateInfoBuildItem> devConsoleTemplateInfoBuildItemBuildProducer,
-            final Optional<TrustyServiceAvailableBuildItem> trustyServiceAvailableBuildItem) {
-        devConsoleTemplateInfoBuildItemBuildProducer.produce(new DevConsoleTemplateInfoBuildItem("isTracingEnabled",
-                trustyServiceAvailableBuildItem.isPresent()));
+    private Collection<UserInfo> readUsersInfo(DevConsoleRuntimeConfig devConsoleRuntimeConfig) {
+        if (devConsoleRuntimeConfig.userConfigByUser.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return devConsoleRuntimeConfig.userConfigByUser.entrySet().stream()
+                .map(entry -> new UserInfo(entry.getKey(), entry.getValue().groups))
+                .collect(Collectors.toList());
+    }
+
+    private String getProperty(ConfigurationBuildItem configurationBuildItem,
+            String propertyKey) {
+
+        String propertyValue = configurationBuildItem
+                .getReadResult()
+                .getAllBuildTimeValues()
+                .get(propertyKey);
+
+        if (propertyValue == null) {
+            propertyValue = configurationBuildItem
+                    .getReadResult()
+                    .getBuildTimeRunTimeValues()
+                    .get(propertyKey);
+        } else {
+            return propertyValue;
+        }
+
+        if (propertyValue == null) {
+            propertyValue = configurationBuildItem
+                    .getReadResult()
+                    .getRunTimeDefaultValues()
+                    .get(propertyKey);
+        }
+
+        return propertyValue;
     }
 }

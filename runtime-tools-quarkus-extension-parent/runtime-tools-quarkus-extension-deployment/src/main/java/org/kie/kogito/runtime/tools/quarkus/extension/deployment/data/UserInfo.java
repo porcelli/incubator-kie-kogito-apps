@@ -16,17 +16,17 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.kie.kogito.runtime.tools.quarkus.extension.runtime.user;
+package org.kie.kogito.runtime.tools.quarkus.extension.deployment.data;
 
 import java.util.List;
 
-public class User {
+public class UserInfo {
 
     private String id;
 
     private List<String> groups;
 
-    public User(final String id,
+    public UserInfo(final String id,
             final List<String> groups) {
         this.id = id;
         this.groups = groups;
