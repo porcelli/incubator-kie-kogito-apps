@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.kie.kogito.runtime.tools.quarkus.extension.runtime.config;
+package org.kie.kogito.swf.tools.runtime.config;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,7 +30,6 @@ import io.vertx.ext.web.RoutingContext;
 
 @Recorder
 public class DevUIStaticArtifactsRecorder {
-
     public Handler<RoutingContext> handler(String deploymentArtifactPath, ShutdownContext shutdownContext) {
         List<FileSystemStaticHandler.StaticWebRootConfiguration> webRootConfigurations = new ArrayList<>();
         webRootConfigurations.add(
