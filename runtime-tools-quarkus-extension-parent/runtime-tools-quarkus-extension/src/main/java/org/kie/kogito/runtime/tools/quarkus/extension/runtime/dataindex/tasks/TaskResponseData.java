@@ -16,26 +16,30 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.kie.kogito.runtime.tools.quarkus.extension.runtime.config;
 
-import java.util.Map;
+package org.kie.kogito.runtime.tools.quarkus.extension.runtime.dataindex.tasks;
 
-import io.quarkus.runtime.annotations.ConfigItem;
-import io.quarkus.runtime.annotations.ConfigPhase;
-import io.quarkus.runtime.annotations.ConfigRoot;
+import java.util.List;
 
-@ConfigRoot(name = "", prefix = "kogito", phase = ConfigPhase.BUILD_AND_RUN_TIME_FIXED)
-public class DevConsoleRuntimeConfig {
+import com.fasterxml.jackson.annotation.JsonProperty;
 
-    /**
-     * Mocked users data for the task inbox screen.
-     */
-    @ConfigItem(name = "users")
-    public Map<String, UserConfig> userConfigByUser;
+public class TaskResponseData {
 
-    /**
-     * DataIndex URL to be used in DevUI
-     */
-    @ConfigItem(name = "data-index.url", defaultValue = "http://localhost:8180")
-    public String dataIndexUrl;
+    @JsonProperty("UserTaskInstances")
+    private List<Task> tasks;
+
+    public TaskResponseData() {
+    }
+
+    public TaskResponseData(final List<Task> tasks) {
+        this.tasks = tasks;
+    }
+
+    public List<Task> getTasks() {
+        return tasks;
+    }
+
+    public void setTasks(final List<Task> userTaskInstancesList) {
+        this.tasks = userTaskInstancesList;
+    }
 }

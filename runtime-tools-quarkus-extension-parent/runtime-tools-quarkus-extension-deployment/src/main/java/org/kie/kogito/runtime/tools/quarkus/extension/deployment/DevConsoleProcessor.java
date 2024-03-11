@@ -18,6 +18,20 @@
  */
 package org.kie.kogito.runtime.tools.quarkus.extension.deployment;
 
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+import org.kie.kogito.quarkus.extensions.spi.deployment.KogitoDataIndexServiceAvailableBuildItem;
+import org.kie.kogito.quarkus.extensions.spi.deployment.TrustyServiceAvailableBuildItem;
+import org.kie.kogito.runtime.tools.quarkus.extension.deployment.data.UserInfo;
+import org.kie.kogito.runtime.tools.quarkus.extension.runtime.config.DevConsoleRuntimeConfig;
+import org.kie.kogito.runtime.tools.quarkus.extension.runtime.config.DevUIStaticArtifactsRecorder;
+import org.kie.kogito.runtime.tools.quarkus.extension.runtime.rpc.JBPMDevuiJsonRPCService;
+
 import io.quarkus.deployment.Capabilities;
 import io.quarkus.deployment.IsDevelopment;
 import io.quarkus.deployment.annotations.BuildProducer;
@@ -30,24 +44,13 @@ import io.quarkus.deployment.builditem.LiveReloadBuildItem;
 import io.quarkus.deployment.builditem.ShutdownContextBuildItem;
 import io.quarkus.deployment.pkg.builditem.CurateOutcomeBuildItem;
 import io.quarkus.deployment.util.WebJarUtil;
+import io.quarkus.devui.spi.JsonRPCProvidersBuildItem;
 import io.quarkus.devui.spi.page.CardPageBuildItem;
 import io.quarkus.devui.spi.page.Page;
 import io.quarkus.maven.dependency.ResolvedDependency;
 import io.quarkus.vertx.http.deployment.NonApplicationRootPathBuildItem;
 import io.quarkus.vertx.http.deployment.RouteBuildItem;
 import io.quarkus.vertx.http.runtime.management.ManagementInterfaceBuildTimeConfig;
-import org.kie.kogito.quarkus.extensions.spi.deployment.KogitoDataIndexServiceAvailableBuildItem;
-import org.kie.kogito.quarkus.extensions.spi.deployment.TrustyServiceAvailableBuildItem;
-import org.kie.kogito.runtime.tools.quarkus.extension.deployment.data.UserInfo;
-import org.kie.kogito.runtime.tools.quarkus.extension.runtime.config.DevConsoleRuntimeConfig;
-import org.kie.kogito.runtime.tools.quarkus.extension.runtime.config.DevUIStaticArtifactsRecorder;
-
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Optional;
-import java.util.stream.Collectors;
 
 public class DevConsoleProcessor {
 
@@ -90,6 +93,11 @@ public class DevConsoleProcessor {
     }
 
     @BuildStep(onlyIf = IsDevelopment.class)
+    public JsonRPCProvidersBuildItem createJsonRPCServiceForJBPMDevUi() {
+        return new JsonRPCProvidersBuildItem(JBPMDevuiJsonRPCService.class);
+    }
+
+    @BuildStep(onlyIf = IsDevelopment.class)
     public CardPageBuildItem pages(
             final NonApplicationRootPathBuildItem nonApplicationRootPathBuildItem,
             final DevConsoleRuntimeConfig devConsoleRuntimeConfig,
@@ -107,13 +115,12 @@ public class DevConsoleProcessor {
 
         String openapiPath = getProperty(configurationBuildItem, "quarkus.smallrye-openapi.path");
         String devUIUrl = getProperty(configurationBuildItem, "kogito.dev-ui.url");
-        String dataIndexUrl = getProperty(configurationBuildItem, "kogito.data-index.url");
         String trustyServiceUrl = getProperty(configurationBuildItem, "kogito.trusty.http.url");
 
         cardPageBuildItem.addBuildTimeData("extensionBasePath", uiPath);
         cardPageBuildItem.addBuildTimeData("openapiPath", openapiPath);
         cardPageBuildItem.addBuildTimeData("devUIUrl", devUIUrl);
-        cardPageBuildItem.addBuildTimeData("dataIndexUrl", dataIndexUrl);
+        cardPageBuildItem.addBuildTimeData("dataIndexUrl", devConsoleRuntimeConfig.dataIndexUrl);
         cardPageBuildItem.addBuildTimeData("isTracingEnabled", trustyServiceAvailableBuildItem.isPresent());
         cardPageBuildItem.addBuildTimeData("trustyServiceUrl", trustyServiceUrl);
         cardPageBuildItem.addBuildTimeData("userData", readUsersInfo(devConsoleRuntimeConfig));
@@ -123,25 +130,29 @@ public class DevConsoleProcessor {
                     .componentLink("qwc-jbpm-quarkus-devui.js")
                     .metadata("page", "Processes")
                     .title("Process Instances")
-                    .icon("font-awesome-solid:diagram-project"));
+                    .icon("font-awesome-solid:diagram-project")
+                    .dynamicLabelJsonRPCMethodName("queryProcessInstancesCount"));
 
             cardPageBuildItem.addPage(Page.webComponentPageBuilder()
                     .componentLink("qwc-jbpm-quarkus-devui.js")
                     .metadata("page", "TaskInbox")
                     .title("Tasks")
-                    .icon("font-awesome-solid:bars-progress"));
+                    .icon("font-awesome-solid:bars-progress")
+                    .dynamicLabelJsonRPCMethodName("queryTasksCount"));
 
             cardPageBuildItem.addPage(Page.webComponentPageBuilder()
                     .componentLink("qwc-jbpm-quarkus-devui.js")
                     .metadata("page", "JobsManagement")
                     .title("Jobs")
-                    .icon("font-awesome-solid:clock"));
+                    .icon("font-awesome-solid:clock")
+                    .dynamicLabelJsonRPCMethodName("queryJobsCount"));
 
             cardPageBuildItem.addPage(Page.webComponentPageBuilder()
                     .componentLink("qwc-jbpm-quarkus-devui.js")
                     .metadata("page", "Forms")
                     .title("Forms")
-                    .icon("font-awesome-solid:table-cells"));
+                    .icon("font-awesome-solid:table-cells")
+                    .dynamicLabelJsonRPCMethodName("getFormsCount"));
         }
 
         if (trustyServiceAvailableBuildItem.isPresent()) {

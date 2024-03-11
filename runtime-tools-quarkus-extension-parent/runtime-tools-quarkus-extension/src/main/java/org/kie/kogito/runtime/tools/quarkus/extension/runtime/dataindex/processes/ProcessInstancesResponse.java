@@ -16,26 +16,25 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.kie.kogito.runtime.tools.quarkus.extension.runtime.config;
 
-import java.util.Map;
+package org.kie.kogito.runtime.tools.quarkus.extension.runtime.dataindex.processes;
 
-import io.quarkus.runtime.annotations.ConfigItem;
-import io.quarkus.runtime.annotations.ConfigPhase;
-import io.quarkus.runtime.annotations.ConfigRoot;
+public class ProcessInstancesResponse {
 
-@ConfigRoot(name = "", prefix = "kogito", phase = ConfigPhase.BUILD_AND_RUN_TIME_FIXED)
-public class DevConsoleRuntimeConfig {
+    private ProcessInstancesData data;
 
-    /**
-     * Mocked users data for the task inbox screen.
-     */
-    @ConfigItem(name = "users")
-    public Map<String, UserConfig> userConfigByUser;
+    public ProcessInstancesResponse() {
+    }
 
-    /**
-     * DataIndex URL to be used in DevUI
-     */
-    @ConfigItem(name = "data-index.url", defaultValue = "http://localhost:8180")
-    public String dataIndexUrl;
+    public ProcessInstancesResponse(final ProcessInstancesData data) {
+        this.data = data;
+    }
+
+    public ProcessInstancesData getData() {
+        return data;
+    }
+
+    public void setData(final ProcessInstancesData data) {
+        this.data = data;
+    }
 }
